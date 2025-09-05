@@ -1,0 +1,398 @@
+---
+title: "Formulário de Situação (Agrupado por Categoria–Subcategoria)"
+format: html
+toc: false
+execute:
+  eval: false
+page-layout: full
+---
+
+```{=html}
+<style>
+  /* Layout geral */
+  .card { border: 1px solid #e5e7eb; border-radius: 14px; padding: 16px; margin: 12px 0; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+  .muted { color: #6b7280; font-size: .95rem; }
+  .label { font-weight: 600; }
+  textarea { width: 100%; min-height: 80px; }
+  input[type="number"] { width: 140px; }
+  .small { font-size: .9rem; }
+  button { border: 1px solid #e5e7eb; background: #fff; padding: 8px 12px; border-radius: 10px; cursor: pointer; }
+  button.primary { background: #111827; color: #fff; }
+
+  /* Blocos por grupo (categoria-subcategoria), na vertical, sem scroll interno */
+  .group-block { border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; margin: 10px 0; }
+  .group-title { margin: 0 0 6px 0; font-size: 1.05rem; font-weight: 700; letter-spacing: .2px; }
+
+  /* Duas linhas por grupo */
+  .line-title { font-size: .9rem; font-weight: 600; margin: 6px 0 6px; color: #374151; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* “Pílulas” (checkbox + nome) — sem mostrar número */
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 9999px; cursor: pointer; user-select: none;
+          border: 1px solid transparent; font-size: .92rem; }
+  .chip input { appearance: none; width: 14px; height: 14px; border: 1.5px solid currentColor; border-radius: 3px; display: inline-block; position: relative; }
+  .chip input:checked::after { content: ""; position: absolute; left: 2px; top: 2px; width: 8px; height: 8px; background: currentColor; border-radius: 2px; }
+
+  /* Somente duas cores por tipo */
+  .chip.O { color: #065f46; background: #e7f7ef; border-color: #bef0d2; }  /* Trafor (O) - verde */
+  .chip.A { color: #7f1d1d; background: #fde8e8; border-color: #f9caca; }  /* Trafar (A)  - vermelho */
+</style>
+
+<div class="card">
+  <h2>Parte 1 — Formulário</h2>
+  <p class="muted">
+    Grupos listados na vertical por <b>categoria–subcategoria</b>. Em cada grupo, <b>duas linhas</b>: Trafores (O) e Trafares (A).
+    Apenas o <b>nome</b> do traço é exibido (sem número). Saída: <code>pergunta,pontuacao,trafores,trafares</code>.
+  </p>
+
+  <div class="row">
+    <div class="stack">
+      <label class="label" for="pergunta">Número da situação</label>
+      <input id="pergunta" type="number" min="1" step="1" placeholder="ex.: 57">
+    </div>
+    <div class="stack">
+      <label class="label" for="pontuacao">Pontuação (0–20)</label>
+      <input id="pontuacao" type="number" min="0" max="20" step="1" placeholder="ex.: 4">
+    </div>
+  </div>
+
+  <div class="stack" style="margin-top:12px;">
+    <label class="label" for="descricao">Descrição da situação (opcional)</label>
+    <textarea id="descricao" placeholder="Descreva a situação..."></textarea>
+  </div>
+
+  <div id="groups-vertical" aria-live="polite" style="margin-top:16px;"></div>
+
+  <div class="small muted" style="margin-top:8px;">Dica: use <i>Ctrl/Cmd+F</i> para localizar traços rapidamente.</div>
+
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+    <button class="primary" id="gerar">Gerar saída</button>
+    <button id="limpar">Limpar seleção</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Parte 2 — Saída</h2>
+
+  <div class="stack">
+    <div class="label">Linha CSV</div>
+    <textarea id="csv-output" readonly placeholder="pergunta,pontuacao,trafores,trafares"></textarea>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button id="copiar">Copiar CSV</button>
+      <button id="baixar">Baixar CSV</button>
+    </div>
+  </div>
+
+  <div class="stack" style="margin-top:12px;">
+    <div class="label">Descrição textual</div>
+    <div id="texto-output" class="small muted">A descrição aparecerá aqui.</div>
+  </div>
+</div>
+
+<script>
+/** CSV utils **/
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return [];
+  const header = lines[0].split(",").map(h => h.trim().toLowerCase());
+  return lines.slice(1).map(line => {
+    const cols = line.split(",");
+    const obj = {};
+    header.forEach((h, i) => obj[h] = (cols[i] ?? "").trim());
+    return obj;
+  });
+}
+function csvEscapeField(s) {
+  if (s == null) return "";
+  const needsQuotes = /[",\n]/.test(s);
+  let out = String(s).replace(/"/g, '""');
+  return needsQuotes ? `"${out}"` : out;
+}
+function generateCSVLine({ pergunta, pontuacao, traforesIds, trafaresIds }) {
+  const traforesStr = traforesIds.join(",");
+  const trafaresStr = trafaresIds.join(",");
+  return [
+    csvEscapeField(pergunta),
+    csvEscapeField(pontuacao),
+    csvEscapeField(traforesStr),
+    csvEscapeField(trafaresStr)
+  ].join(",");
+}
+function downloadText(filename, content) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  URL.revokeObjectURL(url); a.remove();
+}
+
+/** Agrupar por Categoria–Subcategoria (quando existir) e renderizar sem scrolls */
+function renderGroups(container, data) {
+  container.innerHTML = "";
+
+  // Normalização
+  const rows = data.map(r => ({
+    id: String(r.id || "").trim(),
+    tipo: String(r.tipo || "").trim().toUpperCase(),   // O/A
+    nome: String(r.nome || "").trim(),
+    categoria: String(r.categoria || "").trim().toUpperCase(),
+    subcategoria: String(r.subcategoria || "").trim().toUpperCase()
+  }));
+
+  // Chave do grupo: CATEGORIA ou CATEGORIA-SUBCATEGORIA se houver subcategoria
+  const keyOf = (row) => row.subcategoria ? `${row.categoria}-${row.subcategoria}` : row.categoria;
+
+  // Construir dicionário de grupos
+  const groups = {};
+  rows.forEach(row => {
+    const key = keyOf(row);
+    if (!groups[key]) groups[key] = { O:[], A:[] };
+    groups[key][row.tipo].push(row);
+  });
+
+  // Ordenação interna (alfabética por nome)
+  Object.values(groups).forEach(g => {
+    ["O","A"].forEach(t => g[t].sort((a,b)=>a.nome.localeCompare(b.nome,'pt',{sensitivity:'base'})));
+  });
+
+  // Ordem externa dos grupos (categoria base + três subcats da CONSCIENCIALIDADE)
+  const desiredOrder = [
+    "SOMA",
+    "BIOENERGÉTICA",
+    "ANTIEMOCIONALIDADE",
+    "INVULGARIDADE",
+    "LIDERANÇA",
+    "COMUNICABILIDADE",
+    "PRIORIZAÇÃO",
+    "COERÊNCIA",
+    "CONSCIENCIALIDADE-VOLIÇÃO_IDENTIDADE",
+    "CONSCIENCIALIDADE-LUCIDEZ_ANÁLISE",
+    "CONSCIENCIALIDADE-CONDUTA_CONVIVÊNCIA",
+    "UNIVERSALIDADE"
+  ];
+
+  // Montar lista final de chaves respeitando desiredOrder e incluindo extras ao fim
+  const keys = Object.keys(groups);
+  const orderedKeys = [
+    ...desiredOrder.filter(k => keys.includes(k)),
+    ...keys.filter(k => !desiredOrder.includes(k)).sort((a,b)=>a.localeCompare(b,'pt',{sensitivity:'base'}))
+  ];
+
+  // Render
+  orderedKeys.forEach(key => {
+    const g = groups[key];
+    if (!g) return;
+
+    const wrap = document.createElement("div");
+    wrap.className = "group-block";
+
+    const h = document.createElement("div");
+    h.className = "group-title";
+    h.textContent = key; // Ex.: SOMA  /  CONSCIENCIALIDADE-VOLIÇÃO_IDENTIDADE
+    wrap.appendChild(h);
+
+    // Linha Trafores (O)
+    const titleO = document.createElement("div");
+    titleO.className = "line-title";
+    titleO.textContent = "Trafores (O)";
+    wrap.appendChild(titleO);
+
+    const chipsO = document.createElement("div");
+    chipsO.className = "chips";
+    (g.O || []).forEach(item => {
+      const lab = document.createElement("label");
+      lab.className = "chip O";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = item.id;               // mantém id para saída
+      cb.dataset.tipo = "O";
+      cb.dataset.nome = item.nome;
+      cb.dataset.categoria = item.categoria;
+      const txt = document.createElement("span");
+      txt.textContent = item.nome;      // sem número
+      lab.appendChild(cb); lab.appendChild(txt);
+      chipsO.appendChild(lab);
+    });
+    wrap.appendChild(chipsO);
+
+    // Linha Trafares (A)
+    const titleA = document.createElement("div");
+    titleA.className = "line-title";
+    titleA.textContent = "Trafares (A)";
+    wrap.appendChild(titleA);
+
+    const chipsA = document.createElement("div");
+    chipsA.className = "chips";
+    (g.A || []).forEach(item => {
+      const lab = document.createElement("label");
+      lab.className = "chip A";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = item.id;
+      cb.dataset.tipo = "A";
+      cb.dataset.nome = item.nome;
+      cb.dataset.categoria = item.categoria;
+      const txt = document.createElement("span");
+      txt.textContent = item.nome;
+      lab.appendChild(cb); lab.appendChild(txt);
+      chipsA.appendChild(lab);
+    });
+    wrap.appendChild(chipsA);
+
+    container.appendChild(wrap);
+  });
+}
+
+function getSelections() {
+  const checked = Array.from(document.querySelectorAll('#groups-vertical input[type="checkbox"]:checked'));
+  const trafores = [], trafares = [], namesO = [], namesA = [];
+  checked.forEach(cb => {
+    const id = parseInt(cb.value, 10);
+    const tipo = cb.dataset.tipo;
+    const nome = cb.dataset.nome;
+    if (tipo === "O") { trafores.push(id); namesO.push(nome); }
+    else { trafares.push(id); namesA.push(nome); }
+  });
+  trafores.sort((a,b)=>a-b);
+  trafares.sort((a,b)=>a-b);
+  return { trafores, trafares, namesO, namesA };
+}
+
+/** App */
+(async function main(){
+  const container = document.getElementById("groups-vertical");
+  const csvOut = document.getElementById("csv-output");
+  const textoOut = document.getElementById("texto-output");
+  const perguntaEl = document.getElementById("pergunta");
+  const pontuacaoEl = document.getElementById("pontuacao");
+  const descricaoEl = document.getElementById("descricao");
+
+  // Carrega data/tracos.csv (atualizado com 'subcategoria' para CONSCIENCIALIDADE)
+  let data = [];
+  try {
+    const res = await fetch("data/tracos.csv", { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const txt = await res.text();
+    data = parseCSV(txt);
+  } catch(e) {
+    console.warn("Falha em data/tracos.csv, usando fallback de exemplo:", e);
+    data = [
+      {id:"173",tipo:"O",nome:"Psicomotricidade",categoria:"SOMA",subcategoria:""},
+      {id:"182",tipo:"O",nome:"Sanidade",categoria:"SOMA",subcategoria:""},
+      {id:"183",tipo:"O",nome:"Saúde",categoria:"SOMA",subcategoria:""},
+      {id:"42", tipo:"O",nome:"Clareza",categoria:"COMUNICABILIDADE",subcategoria:""},
+      {id:"168",tipo:"A",nome:"Prolixidade",categoria:"COMUNICABILIDADE",subcategoria:""},
+      {id:"1",  tipo:"O",nome:"Abnegação",categoria:"CONSCIENCIALIDADE",subcategoria:"VOLIÇÃO_IDENTIDADE"},
+      {id:"14", tipo:"O",nome:"Analiticidade",categoria:"CONSCIENCIALIDADE",subcategoria:"LUCIDEZ_ANÁLISE"},
+      {id:"5",  tipo:"O",nome:"Afabilidade",categoria:"CONSCIENCIALIDADE",subcategoria:"CONDUTA_CONVIVÊNCIA"},
+    ];
+  }
+
+  renderGroups(container, data);
+
+  document.getElementById("gerar").addEventListener("click", () => {
+    const pergunta = parseInt(perguntaEl.value, 10);
+    const pontuacao = parseInt(pontuacaoEl.value, 10);
+
+    if (!Number.isInteger(pergunta) || pergunta < 1) {
+      alert("Informe um número de situação válido (inteiro >= 1).");
+      return;
+    }
+    if (!Number.isInteger(pontuacao) || pontuacao < 0 || pontuacao > 20) {
+      alert("Pontuação deve ser um inteiro entre 0 e 20.");
+      return;
+    }
+
+    const { trafores, trafares, namesO, namesA } = getSelections();
+    const line = generateCSVLine({ pergunta, pontuacao, traforesIds: trafores, trafaresIds: trafares });
+
+    csvOut.value = "pergunta,pontuacao,trafores,trafares\n" + line;
+
+    const descrTrafores = namesO.length ? namesO.join(", ") : "—";
+    const descrTrafares = namesA.length ? namesA.join(", ") : "—";
+    textoOut.textContent = `Para: pergunta número ${pergunta}, pontuação ${pontuacao}, trafores ${descrTrafores} e trafares ${descrTrafares}.`;
+  });
+
+  document.getElementById("limpar").addEventListener("click", () => {
+    perguntaEl.value = ""; pontuacaoEl.value = ""; descricaoEl.value = "";
+    document.querySelectorAll('#groups-vertical input[type="checkbox"]').forEach(el => el.checked = false);
+    csvOut.value = ""; textoOut.textContent = "A descrição aparecerá aqui.";
+  });
+
+  document.getElementById("copiar").addEventListener("click", async () => {
+    const v = csvOut.value.trim();
+    if (!v) { alert("Nada para copiar ainda."); return; }
+    try { await navigator.clipboard.writeText(v); alert("CSV copiado."); }
+    catch { alert("Não foi possível copiar automaticamente. Copie manualmente."); }
+  });
+
+  document.getElementById("baixar").addEventListener("click", () => {
+    const v = csvOut.value.trim();
+    if (!v) { alert("Nada para baixar ainda."); return; }
+    downloadText("situacao.csv", v + "\n");
+  });
+})();
+</script>
+
+<script>
+// Alfabeto Base58 (Bitcoin): sem 0 O I l
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+// Random bytes via Web Crypto
+function randomBytes(n = 8) { // 8 bytes ≈ 64 bits de entropia
+  const a = new Uint8Array(n);
+  crypto.getRandomValues(a);
+  return a;
+}
+
+// Converte BigInt -> Base58
+function toBase58BigInt(n) {
+  if (n === 0n) return "1"; // '1' representa zero em Base58
+  let s = "";
+  while (n > 0n) {
+    const r = n % 58n;
+    s = B58[Number(r)] + s;
+    n = n / 58n;
+  }
+  return s;
+}
+
+// Gera um short aleatório Base58 com tamanho fixo (default 10 chars)
+function base58RandomShort(len = 10) {
+  // 8 bytes (64 bits) codificados em Base58 geram ~11 chars; cortamos/padronizamos para len
+  const bytes = randomBytes(8);
+  let n = 0n;
+  for (const b of bytes) n = (n << 8n) | BigInt(b);
+  const enc = toBase58BigInt(n);
+  // pad à esquerda com '1' (zero Base58) e corta para o tamanho desejado
+  const padded = enc.length >= len ? enc : "1".repeat(len - enc.length) + enc;
+  return padded.slice(0, len);
+}
+
+// YYMMDD a partir do ISO (interpretado como horário local do navegador)
+function yymmddFromISO(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) throw new Error("Data ISO inválida. Use 'YYYY-MM-DDTHH:MM:SS'.");
+  const yy = String(d.getFullYear() % 100).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yy}${mm}${dd}`;
+}
+
+// ID final: SITU-YYMMDD-short
+function makeSituIdFromISO(iso, shortLen = 6) {
+  const ymd = yymmddFromISO(iso);
+  const short = base58RandomShort(shortLen);
+  return `SITU-${ymd}-${short}`;
+}
+
+// --- exemplos ---
+// console.log(makeSituIdFromISO("2025-09-04T14:23:01"));       // SITU-250904-xxxxxxxxxx
+// console.log(makeSituIdFromISO("2025-09-04T14:23:01", 8));    // SITU-250904-xxxxxxxx
+</script>
+
+
+```
