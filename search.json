@@ -1,0 +1,44 @@
+[
+  {
+    "objectID": "quarto-testes.html",
+    "href": "quarto-testes.html",
+    "title": "Formulário de Situação (Pré-visualização)",
+    "section": "",
+    "text": "Tip\n\n\n\nEste documento funciona em pré-visualização HTML. Certifique-se de que os arquivos trafores-lista.csv e trafares-lista.csv estejam na mesma pasta deste .qmd."
+  },
+  {
+    "objectID": "quarto-testes.html#parte-1-preenchimento",
+    "href": "quarto-testes.html#parte-1-preenchimento",
+    "title": "Formulário de Situação (Pré-visualização)",
+    "section": "Parte 1 — Preenchimento",
+    "text": "Parte 1 — Preenchimento\n\n  \n    Dados da Situação\n\n    \n      \n        Número da situação (inteiro)\n        \n      \n\n      \n        Pontuação (0–20)\n        \n      \n\n      \n        Descrição da situação\n        \n      \n    \n  \n\n  \n    Seleção de Trafores\n    \n      \n    \n  \n\n  \n    Seleção de Trafares\n    \n      \n    \n  \n\n  \n    \n      Gerar saída (Parte 2)\n    \n    \n      Limpar"
+  },
+  {
+    "objectID": "quarto-testes.html#parte-2",
+    "href": "quarto-testes.html#parte-2",
+    "title": "Formulário de Situação (Pré-visualização)",
+    "section": "Parte 2",
+    "text": "Parte 2\n\n  Prévia do CSV\n  pergunta,pontuacao,trafores,trafares\n\n\n  \n    Copiar CSV\n    Baixar CSV\n  \n\n  Resumo Leigo"
+  },
+  {
+    "objectID": "form-situacao.html",
+    "href": "form-situacao.html",
+    "title": "Formulário de Situação (Agrupado por Categoria–Subcategoria)",
+    "section": "",
+    "text": "Parte 1 — Formulário\n  \n    Grupos listados na vertical por categoria–subcategoria. Em cada grupo, duas linhas: Trafores (O) e Trafares (A).\n    Apenas o nome do traço é exibido (sem número). Saída: pergunta,pontuacao,trafores,trafares.\n  \n\n  \n    \n      Número da situação\n      \n    \n    \n      Pontuação (0–20)\n      \n    \n  \n\n  \n    Descrição da situação (opcional)\n    \n  \n\n  \n\n  Dica: use Ctrl/Cmd+F para localizar traços rapidamente.\n\n  \n    Gerar saída\n    Limpar seleção\n  \n\n\n\n  Parte 2 — Saída\n\n  \n    Linha CSV\n    \n    \n      Copiar CSV\n      Baixar CSV\n    \n  \n\n  \n    Descrição textual\n    A descrição aparecerá aqui."
+  },
+  {
+    "objectID": "about.html",
+    "href": "about.html",
+    "title": "About",
+    "section": "",
+    "text": "About this site"
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "formularios",
+    "section": "",
+    "text": "This is a Quarto website.\nTo learn more about Quarto websites visit https://quarto.org/docs/websites."
+  }
+]
