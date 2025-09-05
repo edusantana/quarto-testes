@@ -1,0 +1,252 @@
+---
+title: "Formulário de Situação (Pré-visualização)"
+format:
+  html:
+    theme: cosmo
+    toc: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+::: callout-tip
+Este documento funciona em **pré-visualização HTML**. 
+Certifique-se de que os arquivos `trafores-lista.csv` e `trafares-lista.csv` estejam na **mesma pasta** deste `.qmd`.
+:::
+
+## Parte 1 — Preenchimento
+
+```{=html}
+<form id="form-situacao" style="max-width: 900px;">
+  <fieldset style="border:1px solid #ddd; border-radius:12px; padding:16px; margin-bottom:18px;">
+    <legend style="font-weight:600;">Dados da Situação</legend>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items:start;">
+      <div>
+        <label for="numero" style="display:block; font-weight:600;">Número da situação (inteiro)</label>
+        <input type="number" id="numero" name="numero" min="1" step="1" required style="width:100%; padding:8px;">
+      </div>
+
+      <div>
+        <label for="pontuacao" style="display:block; font-weight:600;">Pontuação (0–20)</label>
+        <input type="number" id="pontuacao" name="pontuacao" min="0" max="20" step="1" required style="width:100%; padding:8px;">
+      </div>
+
+      <div style="grid-column: 1 / -1;">
+        <label for="descricao" style="display:block; font-weight:600;">Descrição da situação</label>
+        <textarea id="descricao" name="descricao" rows="4" placeholder="Descreva a situação…" style="width:100%; padding:8px;"></textarea>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset style="border:1px solid #ddd; border-radius:12px; padding:16px; margin-bottom:18px;">
+    <legend style="font-weight:600;">Seleção de Trafores</legend>
+    <div id="lista-trafores" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px;">
+      <!-- checkboxes carregados dinamicamente -->
+    </div>
+  </fieldset>
+
+  <fieldset style="border:1px solid #ddd; border-radius:12px; padding:16px; margin-bottom:18px;">
+    <legend style="font-weight:600;">Seleção de Trafares</legend>
+    <div id="lista-trafares" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px;">
+      <!-- checkboxes carregados dinamicamente -->
+    </div>
+  </fieldset>
+
+  <div style="display:flex; gap:12px; flex-wrap:wrap;">
+    <button type="button" id="btn-gerar" style="padding:10px 16px; border-radius:10px; border:1px solid #ccc; background:#f7f7f7; cursor:pointer;">
+      Gerar saída (Parte 2)
+    </button>
+    <button type="reset" id="btn-limpar" style="padding:10px 16px; border-radius:10px; border:1px solid #ccc; background:#fff; cursor:pointer;">
+      Limpar
+    </button>
+  </div>
+</form>
+```
+
+## Parte 2
+
+```{=html}
+<div id="saida" style="margin-top: 18px;">
+  <h3>Prévia do CSV</h3>
+  <pre id="csv-preview" style="background:#f8f9fa; padding:12px; border:1px solid #e9ecef; border-radius:8px; overflow:auto;">pergunta,pontuacao,trafores,trafares
+</pre>
+
+  <div style="display:flex; gap:12px; flex-wrap:wrap; margin: 8px 0 18px;">
+    <button type="button" id="btn-copiar" style="padding:10px 16px; border-radius:10px; border:1px solid #ccc; background:#f7f7f7; cursor:pointer;">Copiar CSV</button>
+    <a id="download-link" download="situacao.csv" style="padding:10px 16px; border-radius:10px; border:1px solid #ccc; background:#fff; cursor:pointer; text-decoration:none;">Baixar CSV</a>
+  </div>
+
+  <h3>Resumo Leigo</h3>
+  <div id="resumo" style="background:#fff; padding:12px; border:1px solid #e9ecef; border-radius:8px;">
+    <!-- frase gerada aqui -->
+  </div>
+</div>
+```
+
+
+```{=html}
+<script>
+// --- utilidades ---
+function parseCSVSimple(text) {
+  // CSV simples "id,nome" por linha
+  // Retorna array de objetos: [{id: "1", nome: "Abnegação"}, ...]
+  return text
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+    .map(l => {
+      // divide apenas na primeira vírgula (caso o nome contenha vírgulas no futuro)
+      const idx = l.indexOf(",");
+      if (idx === -1) return null;
+      const id = l.slice(0, idx).trim();
+      const nome = l.slice(idx + 1).trim();
+      if (!id || !nome) return null;
+      return { id, nome };
+    })
+    .filter(Boolean);
+}
+
+async function carregarListaCSV(path) {
+  const resp = await fetch(path, { cache: "no-store" });
+  if (!resp.ok) throw new Error(`Falha ao carregar ${path}: ${resp.status}`);
+  const txt = await resp.text();
+  return parseCSVSimple(txt);
+}
+
+function popularCheckboxes(containerId, itens, groupName) {
+  const cont = document.getElementById(containerId);
+  cont.innerHTML = "";
+  itens.forEach(it => {
+    const id = `${groupName}-${it.id}`;
+    const wrap = document.createElement("label");
+    wrap.style.display = "flex";
+    wrap.style.alignItems = "center";
+    wrap.style.gap = "8px";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = it.id;
+    cb.name = groupName;
+    cb.id = id;
+
+    const span = document.createElement("span");
+    span.textContent = `${it.id} — ${it.nome}`;
+
+    wrap.appendChild(cb);
+    wrap.appendChild(span);
+    cont.appendChild(wrap);
+  });
+}
+
+function coletarSelecionados(name) {
+  return Array.from(document.querySelectorAll(`input[name="${name}"]:checked`))
+              .map(el => el.value)
+              .sort((a,b) => Number(a) - Number(b));
+}
+
+function mapearIdsParaNomes(ids, mapa) {
+  return ids.map(id => mapa.get(id)).filter(Boolean);
+}
+
+function criarCSVLine(pergunta, pontuacao, idsTrafores, idsTrafares) {
+  // campos: pergunta,pontuacao,trafores,trafares
+  // trafores/trafares entre aspas, separados por vírgula
+  const traforesCampo = `"${idsTrafores.join(",")}"`;
+  const trafaresCampo = `"${idsTrafares.join(",")}"`;
+  return `${pergunta},${pontuacao},${traforesCampo},${trafaresCampo}`;
+}
+
+function atualizarSaida({ pergunta, pontuacao, idsTrafores, idsTrafares, nomesTrafores, nomesTrafares }) {
+  const header = "pergunta,pontuacao,trafores,trafares";
+  const line = criarCSVLine(pergunta, pontuacao, idsTrafores, idsTrafares);
+
+  const pre = document.getElementById("csv-preview");
+  pre.textContent = `${header}\n${line}`;
+
+  // link de download
+  const blob = new Blob([`${header}\n${line}\n`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.getElementById("download-link");
+  a.href = url;
+
+  // resumo
+  const frase = `Para: pergunta número ${pergunta}, pontuação ${pontuacao}, trafores ${nomesTrafores.join(", ")} e trafares ${nomesTrafares.join(", ")}.`;
+  document.getElementById("resumo").textContent = frase;
+}
+
+function validarCamposObrigatorios(numero, pontuacao) {
+  if (!numero || Number.isNaN(Number(numero)) || Number(numero) < 1) {
+    alert("Informe um número de situação válido (inteiro ≥ 1).");
+    return false;
+  }
+  if (Number.isNaN(Number(pontuacao)) || Number(pontuacao) < 0 || Number(pontuacao) > 20) {
+    alert("Informe uma pontuação entre 0 e 20.");
+    return false;
+  }
+  return true;
+}
+
+// --- inicialização ---
+(async function init() {
+  try {
+    const trafores = await carregarListaCSV("trafores-lista.csv");
+    const trafares = await carregarListaCSV("trafares-lista.csv");
+
+    // guarda mapas id->nome para montar frase
+    const mapaTrafores = new Map(trafores.map(t => [t.id, t.nome]));
+    const mapaTrafares = new Map(trafares.map(t => [t.id, t.nome]));
+
+    popularCheckboxes("lista-trafores", trafores, "trafores");
+    popularCheckboxes("lista-trafares", trafares, "trafares");
+
+    // eventos
+    document.getElementById("btn-gerar").addEventListener("click", () => {
+      const numero = (document.getElementById("numero").value || "").trim();
+      const pontuacao = (document.getElementById("pontuacao").value || "").trim();
+      // descrição não entra no CSV, mas você pode usar no resumo se desejar
+      const _descricao = (document.getElementById("descricao").value || "").trim();
+
+      if (!validarCamposObrigatorios(numero, pontuacao)) return;
+
+      const idsTrafores = coletarSelecionados("trafores");
+      const idsTrafares = coletarSelecionados("trafares");
+
+      const nomesTrafores = mapearIdsParaNomes(idsTrafores, mapaTrafores);
+      const nomesTrafares = mapearIdsParaNomes(idsTrafares, mapaTrafares);
+
+      atualizarSaida({
+        pergunta: Number(numero),
+        pontuacao: Number(pontuacao),
+        idsTrafores,
+        idsTrafares,
+        nomesTrafores,
+        nomesTrafares
+      });
+    });
+
+    document.getElementById("btn-copiar").addEventListener("click", async () => {
+      const txt = document.getElementById("csv-preview").textContent;
+      try {
+        await navigator.clipboard.writeText(txt);
+        alert("CSV copiado para a área de transferência!");
+      } catch (e) {
+        alert("Não foi possível copiar. Selecione e copie manualmente.");
+      }
+    });
+
+    document.getElementById("btn-limpar").addEventListener("click", () => {
+      // limpa saída também
+      document.getElementById("csv-preview").textContent = "pergunta,pontuacao,trafores,trafares\n";
+      document.getElementById("resumo").textContent = "";
+      // desmarca checkboxes manualmente porque reset nem sempre atinge dinamicamente
+      document.querySelectorAll('input[name="trafores"], input[name="trafares"]').forEach(cb => { cb.checked = false; });
+    });
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao carregar listas de trafores/trafares. Verifique se os CSVs estão no mesmo diretório.");
+  }
+})();
+</script>
+```
